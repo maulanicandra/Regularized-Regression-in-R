@@ -13,6 +13,7 @@ Files contain of:
 5. Model Evaluation.
 ![image](https://user-images.githubusercontent.com/97785087/158914697-d968ed14-3086-4b2f-9782-7642c075c89b.png)
 The intrepetation of RSME, MAE, and MAPE
+
 RSME
 - Ridge: RSME values is 6.820639 which means The standard deviation of prediction errors is 6.820639 i.e. from the regression line, the residuals mostly deviate between +- 6.820639.
 - Lasso: RSME values is 6.823445 which means The standard deviation of prediction errors is 6.823445 i.e. from the regression line, the residuals mostly deviate between +- 6.823445.
