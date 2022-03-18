@@ -1,0 +1,261 @@
+---
+title: "HW_SDay22_MaulaniCandra"
+output: html_document
+date: '2022-03-17'
+---
+
+## Library
+
+```{r}
+install.packages("ggplot2")
+install.packages("caTools")
+install.packages("car")
+install.packages("psych")
+install.packages("dplyr")
+install.packages("glmnet")
+```
+
+## Import Data
+
+```{r}
+data <- read_csv("boston_housing.csv")
+```
+
+Housing Values in Suburbs of Boston
+
+The medv (median value of owner-occupied homes in \\\$1000s) variable is the target variable
+
+## 1. Split Training and Test Data
+
+```{r}
+library(caTools)
+set.seed(123)
+sample <- sample.split(data$medv, SplitRatio = .80)
+pre_train <- subset(data, sample == TRUE)
+sample_train <- sample.split(pre_train$medv, SplitRatio = .80)
+
+# train-validation data
+train <- subset(pre_train, sample_train == TRUE)
+validation <- subset(pre_train, sample_train == FALSE)
+
+# test data
+test <- subset(data, sample == FALSE)
+
+```
+
+## 2. Correlation Study
+
+```{r}
+library(psych)
+pairs.panels(train,
+             method = "pearson", # correlation method
+             hist.col = "#00AFBB",
+             density = TRUE,  # show density plots
+             ellipses = TRUE # show correlation ellipses
+)
+```
+
+Correlation study result:
+
+1.  The Feature tax and rad are positively correlated with each other (0.91)
+
+2.  The feature age and dis are negatively correlated with each other (-0.75)
+
+3.  Price (medv) depends upon feature RM (positively correlated 0.75) and lstat (negatively correlated -0.76)
+
+Since Threshold abs(corr) \>=0.8, the feature tax and rad are selected to be compared with medv. Since rad -\> medv \< tax -\> medv, rad (Index of accessibility to radial highways) will be drop
+
+## Drop Correlated Columns
+
+```{r}
+library(dplyr)
+drop_cols <- 'rad'
+
+train <- train %>% select(-drop_cols)
+validation <-  validation %>% select(-drop_cols)
+test <- test %>% select(-drop_cols)
+
+# feature preprocessing
+# to ensure we handle categorical features
+x <- model.matrix(medv ~ ., train)[,-1]
+y <-  train$medv
+```
+
+#### 3. Model Training
+
+### Ridge Regression
+
+```{r}
+library(glmnet)
+# fit multiple ridge regression with different lambda
+# lambda = [0.01, 0.1, 1, 10]
+
+ridge_reg_pointzeroone <- glmnet(x, y, alpha = 0, lambda = 0.01)
+coef(ridge_reg_pointzeroone)
+
+ridge_reg_pointone <- glmnet(x, y, alpha = 0, lambda = 0.1)
+coef(ridge_reg_pointone)
+
+ridge_reg_one <- glmnet(x, y, alpha = 0, lambda = 1)
+coef(ridge_reg_one)
+
+ridge_reg_ten <- glmnet(x, y, alpha = 0, lambda = 10)
+coef(ridge_reg_ten)
+
+```
+
+### 4.a.1. Use RMSE as metric
+
+```{r}
+# comparison on validation data
+# to choose the best lambda
+
+# Make predictions on the validation data
+x_validation <- model.matrix(medv ~., validation)[,-1]
+y_validation <- validation$medv
+
+RMSE_ridge_pointzeroone <- sqrt(mean((y_validation - predict(ridge_reg_pointzeroone, x_validation))^2))
+RMSE_ridge_pointzeroone # the result 4.3464 -> best
+
+RMSE_ridge_pointone <- sqrt(mean((y_validation - predict(ridge_reg_pointone, x_validation))^2))
+RMSE_ridge_pointone # the result 4.349494
+
+RMSE_ridge_one <- sqrt(mean((y_validation - predict(ridge_reg_one, x_validation))^2))
+RMSE_ridge_one # the result 4.422032
+
+RMSE_ridge_ten <- sqrt(mean((y_validation - predict(ridge_reg_ten, x_validation))^2))
+RMSE_ridge_ten # the result 5.342122
+```
+
+The best lambda of ridge regression based on validation data is 0.01. The RSME value or The standard deviation of prediction errors is 4.3464 (lowest)
+
+```{r}
+# Best model's coefficients
+# recall the best model --> ridge_reg_pointzeroone
+coef(ridge_reg_pointzeroone)
+
+```
+
+### 4.b.1. Interpret a sample of the coefficients of the best model (Ridge)
+
+rm = 4.517287e+00
+
+An increase of 1 point in rm while the other features are kept fixed, is associated with an increase of 4.517287 point in medv.
+
+### 4. Lasso Regression
+
+```{r}
+# fit multiple lasso regression with different lambda
+# lambda = [0.01, 0.1, 1, 10]
+
+lasso_reg_pointzeroone <- glmnet(x, y, alpha = 1, lambda = 0.01)
+coef(lasso_reg_pointzeroone)
+
+lasso_reg_pointone <- glmnet(x, y, alpha = 1, lambda = 0.1)
+coef(lasso_reg_pointone)
+
+lasso_reg_one <- glmnet(x, y, alpha = 1, lambda = 1)
+coef(lasso_reg_one)
+
+lasso_reg_ten <- glmnet(x, y, alpha = 1, lambda = 10)
+coef(lasso_reg_ten)
+```
+
+### 4.a.2. Use RMSE as metric
+
+```{r}
+# comparison on validation data
+# to choose the best lambda
+# Make predictions on the validation data
+
+RMSE_lasso_pointzeroone <- sqrt(mean((y_validation - predict(lasso_reg_pointzeroone, x_validation))^2))
+RMSE_lasso_pointzeroone # the best result is 4.340783
+
+RMSE_lasso_pointone <- sqrt(mean((y_validation - predict(lasso_reg_pointone, x_validation))^2))
+RMSE_lasso_pointone # the result is 4.352728
+
+RMSE_lasso_one <- sqrt(mean((y_validation - predict(lasso_reg_one, x_validation))^2))
+RMSE_lasso_one # the result is 4.937774
+
+RMSE_lasso_ten <- sqrt(mean((y_validation - predict(lasso_reg_ten, x_validation))^2))
+RMSE_lasso_ten # the result is 9.371755
+
+```
+
+The best lambda of lasso regression based on validation data is 0.01. The RSME value or The standard deviation of prediction errors is 4.340783 (lowest)
+
+```{r}
+# Best model's coefficients
+# recall the best model --> lasso_reg_pointzeroone
+coef(lasso_reg_pointzeroone)
+```
+
+### 4.b.1. Interpret a sample of the coefficients of the best model (Lasso)
+
+rm = 4.531757e+00
+
+An increase of 1 point in rm while the other features are kept fixed, is associated with an increase of 4.531757 point in medv.
+
+## 4. Evaluate The Model
+
+```{r}
+# Prepare test data
+x_test <- model.matrix(medv ~., test)[,-1]
+y_test <- test$medv
+```
+
+### Ridge Test
+
+```{r}
+# RMSE
+RMSE_ridge_best <- sqrt(mean((y_test - predict(ridge_reg_pointzeroone, x_test))^2))
+RMSE_ridge_best
+
+# MAE
+MAE_ridge_best <- mean(abs(y_test-predict(ridge_reg_pointzerozerozerozeroone, x_test)))
+MAE_ridge_best
+
+# MAPE
+MAPE_ridge_best <- mean(abs((predict(ridge_reg_pointzerozerozerozeroone, x_test) - y_test))/y_test)
+MAPE_ridge_best
+```
+
+### Lasso Test
+
+```{r}
+# RMSE
+RMSE_lasso_best <- sqrt(mean((y_test - predict(lasso_reg_pointzeroone, x_test))^2))
+RMSE_lasso_best
+
+# MAE
+MAE_lasso_best <- mean(abs(y_test-predict(lasso_reg_pointzeroone, x_test)))
+MAE_lasso_best
+
+# MAPE
+MAPE_ridge_best <- mean(abs((predict(lasso_reg_pointzeroone, x_test) - y_test))/y_test)
+MAPE_ridge_best
+```
+
+|      | Ridge        | Lasso         |
+|------|--------------|---------------|
+| RSME | **6.820639** | 6.823445      |
+| MAE  | 3.898674     | **3.888415**  |
+| MAPE | 0.1711394    | **0.1707025** |
+
+    The model chosen is the model that has the lowest RSME value, namely Ridge Regression. RSME values is 6.820639 which means The standard deviation of prediction errors is 6.820639 i.e. from the regression
+    line, the residuals mostly deviate between +- 6.820639.
+
+The intrepetation of RSME, MAE, and MAPE
+
+1.  RSME
+    -   Ridge: RSME values is 6.820639 which means The standard deviation of prediction errors is 6.820639 i.e. from the regression line, the residuals mostly deviate between +- 6.820639.
+
+    -   Lasso: RSME values is 6.823445 which means The standard deviation of prediction errors is 6.823445 i.e. from the regression line, the residuals mostly deviate between +- 6.823445.
+2.  MAE
+    -   Ridge: On average, our prediction deviates the true medv by 3.898674.
+
+    -   Lasso: On average, our prediction deviates the true medv by 3.888415.
+3.  MAPE
+    -   Ridge: The 3.898674 deviation is equivalent to 17.11394% deviation relative to the true medv
+
+    -   Lasso: The 3.888415 deviation is equivalent to 17.07025% deviation relative to the true medv
